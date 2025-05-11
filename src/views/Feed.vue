@@ -72,7 +72,7 @@ export default {
     const userEmail = ref('');
     const posts = ref([]);
     const loading = ref(true);
-    const selectedPostId = ref(null);
+    const selectedPostId = ref('');
     const commentsVisible = ref(false);
 
     const loadPosts = async () => {
@@ -131,7 +131,6 @@ export default {
         post.likes.push(user.uid);
       }
     };
-
     onMounted(() => {
       if (auth.currentUser) {
         userEmail.value = auth.currentUser.email;
@@ -144,7 +143,7 @@ export default {
       const date = new Date(timestamp.seconds * 1000);
       return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
     };
-
+    
     return {
       userEmail,
       posts,
@@ -158,6 +157,7 @@ export default {
       signOutUser,
       formatDate,
     };
+    
   },
 };
 </script>

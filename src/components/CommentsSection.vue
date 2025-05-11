@@ -17,7 +17,7 @@
             </div>
             <p class="comment-content">{{ comment.content }}</p>
             <div class="comment-actions">
-              <button v-if="isCommentAuthor(comment.authorId)" @click="deleteComment(comment.id)" class="delete-button">
+              <button v-if="isCommentAuthor(comment.authorId)" @click="deleteComment($index)" class="delete-button">
                 <font-awesome-icon icon="trash" class="icon" />
               </button>
             </div>
@@ -41,7 +41,7 @@
   </template>
   
   <script>
-  import { ref, onMounted } from "vue";
+  import { ref, onMounted, watch } from "vue";
   import { doc, updateDoc, arrayUnion, getDoc } from "firebase/firestore";
   import { auth, db } from "../firebase";
   
@@ -51,6 +51,13 @@
       postId: {
         type: String,
         required: true,
+        validator: (value) => {
+          if (value === null) {
+            console.warn('postId est null, ce qui n\'est pas autorisé');
+            return false;
+          }
+          return true;
+        }
       },
       visible: {
         type: Boolean,
@@ -72,13 +79,15 @@
           console.error('ID du post non défini');
           return;
         }
-  
+
         try {
           const postRef = doc(db, "posts", props.postId);
           const postSnap = await getDoc(postRef);
-  
+          
           if (postSnap.exists()) {
-            comments.value = postSnap.data().comments || [];
+            const post = postSnap.data();
+            comments.value = post.comments || [];
+            console.log('Commentaires chargés:', comments.value);
           }
         } catch (error) {
           console.error('Erreur lors du chargement des commentaires:', error);
@@ -115,17 +124,19 @@
       };
   
       // Supprimer un commentaire
-      const deleteComment = async (commentId) => {
+      const deleteComment = async (commentIndex) => {
         try {
           const postRef = doc(db, "posts", props.postId);
           const postSnap = await getDoc(postRef);
-  
-          const updatedComments = postSnap.data().comments.filter(
-            (comment) => comment.id !== commentId
-          );
-  
-          await updateDoc(postRef, { comments: updatedComments });
-          loadComments();
+
+          if (postSnap.exists()) {
+            const post = postSnap.data();
+            const comments = post.comments || [];
+            const updatedComments = comments.filter((_, index) => index !== commentIndex);
+
+            await updateDoc(postRef, { comments: updatedComments });
+            loadComments();
+          }
         } catch (error) {
           console.error("Erreur lors de la suppression du commentaire:", error);
         }
@@ -141,12 +152,16 @@
         return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
       };
   
-      // Charger les commentaires lors du montage
-      onMounted(() => {
-        if (props.postId) {
+      // Gérer le chargement et le déchargement des commentaires
+      watch(() => props.visible, (isVisible) => {
+        if (isVisible && props.postId) {
+          console.log('Chargement des commentaires pour le post:', props.postId);
           loadComments();
+        } else {
+          console.log('Déchargement des commentaires');
+          comments.value = [];
         }
-      });
+      }, { immediate: true });
   
       return {
         comments,
