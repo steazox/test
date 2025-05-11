@@ -1,81 +1,56 @@
 <template>
-  <div class="min-h-screen bg-gray-100 p-4">
-    <div class="max-w-4xl mx-auto">
-      <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-bold text-gray-800">Feed</h1>
-        <button @click="signOutUser" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition">
-          <i class="fas fa-sign-out-alt mr-2"></i>
+  <div class="feed-container">
+    <div class="feed-wrapper">
+      <div class="header">
+        <h1 class="feed-title">Feed</h1>
+        <button @click="signOutUser" class="sign-out-btn">
+          <font-awesome-icon icon="sign-out-alt" class="mr-2" />
           Se déconnecter
         </button>
       </div>
 
-      <div class="space-y-6" v-if="!loading">
-        <div v-for="post in posts" :key="post.id" class="bg-white rounded-lg shadow-md p-6">
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center">
-              <div class="ml-3">
-                <h3 class="text-gray-800 font-semibold">{{ post.authorDisplayName }}</h3>
-                <p class="text-sm text-gray-500">{{ formatDate(post.createdAt) }}</p>
-              </div>
+      <div class="posts" v-if="!loading">
+        <div v-for="post in posts" :key="post.id" class="post">
+          <div class="post-header">
+            <div class="author-info">
+              <h3 class="author-name">{{ post.authorDisplayName }}</h3>
+              <p class="post-date">{{ formatDate(post.createdAt) }}</p>
             </div>
           </div>
 
-          <h2 class="text-xl font-semibold text-gray-800 mb-4">{{ post.title }}</h2>
-          <p class="text-gray-700 mb-4">{{ post.content }}</p>
+          <h2 class="post-title">{{ post.title }}</h2>
+          <p class="post-content">{{ post.content }}</p>
 
-          <div v-if="post.imageUrl" class="mb-4">
-            <img :src="post.imageUrl" :alt="post.title" class="rounded-lg w-full">
+          <div v-if="post.imageUrl" class="post-image">
+            <img :src="post.imageUrl" :alt="post.title" />
           </div>
 
-          <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center space-x-4">
-              <button @click="toggleLike(post.id)" :class="{ 'text-red-500': isPostLiked(post.id) }" class="flex items-center text-gray-600 hover:text-red-500 transition">
-                <i class="fas fa-heart mr-1"></i>
-                <span>{{ post.likes?.length || 0 }}</span>
+          <div class="post-actions">
+            <div class="actions">
+              <button @click="toggleLike(post.id)" class="like-btn">
+                <font-awesome-icon
+                  :icon="['fas', 'heart']"
+                  :style="{ color: isPostLiked(post.id) ? 'red' : 'gray' }"
+                />
+                <span :class="{ 'liked': isPostLiked(post.id) }">{{ post.likes?.length || 0 }}</span>
               </button>
-              <button @click="toggleComments(post.id)" class="flex items-center text-gray-600 hover:text-blue-500 transition">
-                <i class="fas fa-comment mr-1"></i>
+              <button @click="openComments(post.id)" class="comment-btn">
+                <font-awesome-icon icon="comment" class="mr-1" />
                 <span>{{ post.comments?.length || 0 }}</span>
               </button>
-            </div>
-          </div>
-
-          <div v-if="showComments[post.id]" class="mt-4">
-            <div v-for="comment in post.comments || []" :key="comment.id" class="flex items-start mb-4">
-              <div class="ml-3">
-                <div class="flex items-center mb-2">
-                  <strong class="text-gray-800">{{ comment.authorDisplayName }}</strong>
-                  <span class="ml-2 text-sm text-gray-500">{{ formatDate(comment.createdAt) }}</span>
-                </div>
-                <p class="text-gray-700">{{ comment.content }}</p>
-                <div class="flex items-center mt-2" v-if="isCommentAuthor(comment.authorId)">
-                  <button @click="deleteComment(post.id, comment.id)" class="text-red-500 hover:text-red-600 transition">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4">
-              <form @submit.prevent="addComment(post.id)" class="flex space-x-4">
-                <input
-                  v-model="commentsInput[post.id]"
-                  type="text"
-                  placeholder="Ajouter un commentaire..."
-                  class="flex-1 px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition">
-                  Commenter
-                </button>
-              </form>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="flex justify-center items-center min-h-[200px]" v-else>
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <CommentsSection
+        :postId="selectedPostId"
+        :visible="commentsVisible"
+        :closeComments="closeComments"
+      />
+
+      <div class="loading-indicator" v-if="loading">
+        <div class="spinner"></div>
       </div>
     </div>
   </div>
@@ -83,18 +58,79 @@
 
 <script>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { auth, db } from '../firebase';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, arrayRemove, arrayUnion } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
+import CommentsSection from '../components/CommentsSection.vue';
 
 export default {
   name: 'Feed',
+  components: { CommentsSection },
   setup() {
+    const router = useRouter();
     const userEmail = ref('');
     const posts = ref([]);
     const loading = ref(true);
-    const showComments = ref({});
-    const commentsInput = ref({});
+    const selectedPostId = ref(null);
+    const commentsVisible = ref(false);
+
+    const loadPosts = async () => {
+      try {
+        const postsRef = collection(db, 'posts');
+        const snapshot = await getDocs(postsRef);
+        posts.value = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        loading.value = false;
+      } catch (error) {
+        console.error('Erreur lors du chargement des posts:', error);
+      }
+    };
+
+    const isPostLiked = (postId) => {
+      const post = posts.value.find((p) => p.id === postId);
+      const user = auth.currentUser;
+
+      if (!post || !user) return false;
+      return post.likes?.includes(user.uid);
+    };
+
+    const openComments = (postId) => {
+      selectedPostId.value = postId;
+      commentsVisible.value = true;
+    };
+
+    const closeComments = () => {
+      commentsVisible.value = false;
+      selectedPostId.value = null;
+    };
+
+    const signOutUser = async () => {
+      try {
+        await signOut(auth);
+        router.push('/login');
+      } catch (error) {
+        console.error('Erreur lors de la déconnexion:', error);
+      }
+    };
+
+    const toggleLike = async (postId) => {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const postRef = doc(db, 'posts', postId);
+      const post = posts.value.find((p) => p.id === postId);
+
+      if (post.likes.includes(user.uid)) {
+        await updateDoc(postRef, { likes: arrayRemove(user.uid) });
+        post.likes = post.likes.filter((uid) => uid !== user.uid);
+      } else {
+        await updateDoc(postRef, { likes: arrayUnion(user.uid) });
+        post.likes.push(user.uid);
+      }
+    };
 
     onMounted(() => {
       if (auth.currentUser) {
@@ -103,185 +139,166 @@ export default {
       }
     });
 
-    const loadPosts = async () => {
-      try {
-        const postsRef = collection(db, 'posts');
-        const snapshot = await getDocs(postsRef);
-        
-        const postsWithInteractions = await Promise.all(
-          snapshot.docs.map(async (doc) => {
-            const post = {
-              id: doc.id,
-              ...doc.data()
-            };
-
-            // Charger les commentaires
-            const commentsRef = collection(db, 'posts', doc.id, 'comments');
-            const commentsSnapshot = await getDocs(commentsRef);
-            post.comments = commentsSnapshot.docs.map(commentDoc => ({
-              id: commentDoc.id,
-              ...commentDoc.data()
-            }));
-
-            // Charger les likes
-            const likesRef = collection(db, 'posts', doc.id, 'likes');
-            const likesSnapshot = await getDocs(likesRef);
-            post.likes = likesSnapshot.docs.map(likeDoc => likeDoc.data());
-
-            return post;
-          })
-        );
-
-        posts.value = postsWithInteractions;
-        loading.value = false;
-      } catch (error) {
-        console.error('Erreur lors du chargement des posts:', error);
-      }
-    };
-
-    const signOutUser = async () => {
-      try {
-        await signOut(auth);
-      } catch (error) {
-        console.error('Erreur lors de la déconnexion:', error);
-      }
-    };
-
-    const toggleComments = (postId) => {
-      showComments.value[postId] = !showComments.value[postId];
-    };
-
-    const isPostLiked = (postId) => {
-  const post = posts.value.find((p) => p.id === postId);
-  const user = auth.currentUser;
-
-  if (!post || !user) return false;
-
-  // Si likes est un objet
-  if (typeof post.likes === 'object' && post.likes !== null) {
-    return Object.keys(post.likes).includes(user.uid);
-  }
-
-  // Si likes est un tableau
-  if (Array.isArray(post.likes)) {
-    return post.likes.some((like) => like === user.uid);
-  }
-
-  // Si likes est d'un autre type ou indéfini
-  return false;
-};
-
-    const toggleLike = async (postId) => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const likesRef = collection(db, 'posts', postId, 'likes');
-        const likeRef = doc(likesRef, user.uid);
-        const likeDoc = await getDoc(likeRef);
-
-        if (likeDoc.exists()) {
-          await deleteDoc(likeRef);
-        } else {
-          await setDoc(likeRef, {
-            userId: user.uid,
-            createdAt: serverTimestamp(),
-          });
-        }
-
-        // Mettre à jour les likes en temps réel
-        const postIndex = posts.value.findIndex(p => p.id === postId);
-        if (postIndex !== -1) {
-          const post = posts.value[postIndex];
-          const hasLiked = post.likes?.some(l => l.userId === user.uid);
-          
-          if (hasLiked) {
-            posts.value[postIndex].likes = post.likes.filter(
-              l => l.userId !== user.uid
-            );
-          } else {
-            posts.value[postIndex].likes = [
-              ...(post.likes || []),
-              { userId: user.uid }
-            ];
-          }
-        }
-      } catch (error) {
-        console.error('Erreur lors de la mise à jour des likes:', error);
-      }
-    };
-
-
-    const addComment = async (postId) => {
-      if (!commentsInput.value[postId]) return;
-
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const comment = {
-          content: commentsInput.value[postId],
-          authorId: user.uid,
-          authorDisplayName: user.displayName || user.email.split('@')[0],
-          createdAt: serverTimestamp(),
-        };
-
-        await addDoc(collection(db, 'posts', postId, 'comments'), comment);
-        commentsInput.value[postId] = '';
-        loadPosts(); // Recharger les posts pour mettre à jour
-      } catch (error) {
-        console.error('Erreur lors de l\'ajout du commentaire:', error);
-      }
-    };
-
-    const isCommentAuthor = (authorId) => {
-      const user = auth.currentUser;
-      return user && user.uid === authorId;
-    };
-
-    const formatDate = (date) => {
-      if (!date) return 'Date inconnue';
-      const d = date.toDate ? date.toDate() : new Date(date);
-      return d.toLocaleDateString('fr-FR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    };
-
-    const deleteComment = async (postId, commentId) => {
-      try {
-        const db = getFirestore();
-        await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
-
-        // Mettre à jour les commentaires en temps réel
-        const postIndex = posts.value.findIndex(p => p.id === postId);
-        if (postIndex !== -1) {
-          posts.value[postIndex].comments = posts.value[postIndex].comments.filter(
-            c => c.id !== commentId
-          );
-        }
-      } catch (error) {
-        console.error('Erreur lors de la suppression du commentaire:', error);
-      }
+    const formatDate = (timestamp) => {
+      if (!timestamp) return 'Date inconnue';
+      const date = new Date(timestamp.seconds * 1000);
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
     };
 
     return {
       userEmail,
       posts,
       loading,
-      showComments,
-      commentsInput,
-      signOutUser,
-      toggleComments,
+      selectedPostId,
+      commentsVisible,
+      openComments,
+      closeComments,
+      toggleLike,
       isPostLiked,
-      addComment,
+      signOutUser,
       formatDate,
     };
   },
 };
 </script>
 
+<style scoped>
+.feed-container {
+  min-height: 100vh;
+  background-color: #f7fafc;
+  padding: 16px;
+}
 
+.feed-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.feed-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #2d3748;
+}
+
+.sign-out-btn {
+  background-color: #f56565;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sign-out-btn:hover {
+  background-color: #e53e3e;
+}
+
+.posts {
+  margin-bottom: 24px;
+}
+
+.post {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+}
+
+.author-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.post-date {
+  font-size: 14px;
+  color: #718096;
+}
+
+.post-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 16px;
+}
+
+.post-content {
+  color: #4a5568;
+  margin-bottom: 16px;
+}
+
+.post-image img {
+  border-radius: 8px;
+  width: 100%;
+}
+
+.post-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.like-btn,
+.comment-btn {
+  display: flex;
+  align-items: center;
+  color: #4a5568;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.like-btn:hover {
+  color: #e53e3e;
+}
+
+.comment-btn:hover {
+  color: #3182ce;
+}
+
+.liked {
+  color: #e53e3e;
+}
+
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+.spinner {
+  border: 4px solid #ccc;
+  border-top: 4px solid #3182ce;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>

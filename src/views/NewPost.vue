@@ -57,6 +57,8 @@ import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/fires
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useRouter } from 'vue-router'
 
+const router = useRouter()
+
 
 
 const title = ref('')
@@ -131,7 +133,9 @@ const createPost = async () => {
       authorEmail: user.email,
       authorDisplayName: displayName.value,
       imageUrl: imageUrl.value,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      likes: [],
+      comments: []
     })
 
     // Réinitialiser les champs
@@ -144,7 +148,7 @@ const createPost = async () => {
     router.push('/feed')
   } catch (error) {
     console.error('Erreur lors de la création du post:', error)
-    alert('Une erreur est survenue lors de la création du post')
+    alert(`Une erreur est survenue lors de la création du post: ${error.message}`)
   } finally {
     loading.value = false
   }
