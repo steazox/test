@@ -1,8 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Feed from '../views/Feed.vue'
-import Login from '../components/Auth/Login.vue'
-import Register from '../components/Auth/Register.vue'
 import { getAuth } from 'firebase/auth'
 
 const routes = [
@@ -29,16 +27,18 @@ const routes = [
     component: () => import('../views/Profile.vue'),
     meta: { requiresAuth: true }
   },
+
   {
     path: '/login',
     name: 'Login',
-    component: Login
+    component: () => import('../components/Auth/Login.vue')
   },
   {
     path: '/register',
     name: 'Register',
-    component: Register
-  }
+    component: () => import('../components/Auth/Register.vue')
+  },
+
 ]
 
 const router = createRouter({

@@ -3,12 +3,12 @@
     <div class="content">
       <router-view></router-view>
     </div>
-    <Navbar />
+    <Navbar/>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { useRouter } from 'vue-router'
 import Navbar from './components/Navbar.vue'
@@ -16,19 +16,22 @@ import Navbar from './components/Navbar.vue'
 const auth = getAuth()
 const router = useRouter()
 
-// Redirection automatique vers le feed si utilisateur connecté
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    // Utilisateur connecté
-    console.log('Utilisateur connecté:', user.email)
-    // Redirection vers le feed
-    router.push('/feed')
-  } else {
-    // Aucun utilisateur connecté
-    console.log('Aucun utilisateur connecté')
-    // Redirection vers la page d'accueil
-    router.push('/')
-  }
+// Redirection automatique après le chargement initial
+onMounted(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // Utilisateur connecté
+      console.log('Utilisateur connecté:', user.email)
+      // Redirection vers le feed
+      router.push('/feed')
+    } else {
+      // Aucun utilisateur connecté
+      console.log('Aucun utilisateur connecté')
+      // Redirection vers la page de connexion
+      router.push('/login')
+    }
+    unsubscribe() // Nettoyer l'écouteur après la première vérification
+  })
 })
 </script>
 

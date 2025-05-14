@@ -1,11 +1,11 @@
 {
-  "name": "Test PWA Notifications",
-  "short_name": "Test PWA",
-  "description": "Application de test pour les notifications PWA",
+  "name": "Botty",
+  "short_name": "Botty",
+  "description": "Une application de réseaux sociaux",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#3b82f6",
   "icons": [
     {
       "src": "/icon-192x192.png",

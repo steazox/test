@@ -79,6 +79,33 @@ export default {
       }));
     };
 
+    const uploadProfileImage = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file); // Ajouter le fichier dans le formData
+
+  try {
+    const response = await fetch("http://192.168.1.68:3000/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error("Échec de l'upload de l'image");
+    }
+
+    const data = await response.json();
+    const fileID = data.fileID; // Supposons que l'API retourne le fileID de l'image téléchargée
+    console.log(data.fileID);
+
+    // Récupérer l'URL de l'image en utilisant le fileID
+    const imageUrl = await getImageUrl(fileID);
+    userProfileImage.value = imageUrl; // Mettre à jour l'image du profil
+  } catch (error) {
+    console.error("Erreur lors de l'upload de l'image:", error);
+  }
+};
+
+
     const loadProfileImage = async () => {
       // Remplacez par le code approprié pour charger l'image de profil.
       userProfileImage.value = "default-image-path"; // Exemple

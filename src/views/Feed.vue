@@ -7,6 +7,13 @@
           <font-awesome-icon icon="sign-out-alt" class="mr-2" />
           Se déconnecter
         </button>
+        <button 
+          v-if="notificationPermission === 'default'" 
+          @click="requestNotificationPermission" 
+          class="notification-button"
+        >
+          Autoriser les notifications
+        </button>
       </div>
 
       <div class="posts" v-if="!loading">
@@ -14,6 +21,7 @@
           <div class="post-header">
             <div class="author-info">
               <h3 class="author-name">{{ post.authorDisplayName }}</h3>
+              <p class="author-pseudo">@{{ post.authorPseudo }}</p>
               <p class="post-date">{{ formatDate(post.createdAt) }}</p>
             </div>
           </div>
@@ -57,7 +65,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth, db } from '../firebase';
 import { collection, getDocs, updateDoc, doc, arrayRemove, arrayUnion } from 'firebase/firestore';
@@ -69,17 +77,46 @@ export default {
   components: { CommentsSection },
   setup() {
     const router = useRouter();
-    const userEmail = ref('');
     const posts = ref([]);
     const loading = ref(true);
     const selectedPostId = ref('');
     const commentsVisible = ref(false);
+    const notificationPermission = ref(Notification.permission);
+
+    // Gestion des notifications
+    const requestNotificationPermission = () => {
+      if (!('Notification' in window)) {
+        console.log('Les notifications ne sont pas supportées par ce navigateur');
+        return;
+      }
+      Notification.requestPermission().then(permission => {
+        notificationPermission.value = permission;
+        if (permission === 'granted') {
+          console.log('Notifications autorisées');
+        } else {
+          console.log('Notifications refusées ou bloquées');
+        }
+      });
+    };
+
+    const showNotification = (title, body) => {
+  if (notificationPermission.value === 'granted') {
+    try {
+      new Notification(title, { body, icon: '/favicon.ico' });
+    } catch (error) {
+      console.error('Erreur lors de l’envoi de la notification :', error);
+    }
+  } else {
+    console.warn('Les notifications ne sont pas autorisées.');
+  }
+};
+
 
     const loadPosts = async () => {
       try {
         const postsRef = collection(db, 'posts');
         const snapshot = await getDocs(postsRef);
-        posts.value = snapshot.docs.map((doc) => ({
+        posts.value = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
         }));
@@ -89,15 +126,37 @@ export default {
       }
     };
 
-    const isPostLiked = (postId) => {
-      const post = posts.value.find((p) => p.id === postId);
+    const isPostLiked = postId => {
+      const post = posts.value.find(p => p.id === postId);
       const user = auth.currentUser;
-
-      if (!post || !user) return false;
-      return post.likes?.includes(user.uid);
+      return post && user && post.likes?.includes(user.uid);
     };
 
-    const openComments = (postId) => {
+    const toggleLike = async postId => {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const postRef = doc(db, 'posts', postId);
+      const post = posts.value.find(p => p.id === postId);
+
+      if (post.likes.includes(user.uid)) {
+        await updateDoc(postRef, { likes: arrayRemove(user.uid) });
+        post.likes = post.likes.filter(uid => uid !== user.uid);
+        showNotification('Post non aimé', `Vous avez retiré votre like de "${post.title}"`);
+      } else {
+        await updateDoc(postRef, { likes: arrayUnion(user.uid) });
+        post.likes.push(user.uid);
+        showNotification('Post aimé', `Vous avez aimé "${post.title}"`);
+      }
+    };
+
+    const formatDate = timestamp => {
+      if (!timestamp) return 'Date inconnue';
+      const date = new Date(timestamp.seconds * 1000);
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+    };
+
+    const openComments = postId => {
       selectedPostId.value = postId;
       commentsVisible.value = true;
     };
@@ -116,169 +175,256 @@ export default {
       }
     };
 
-    const toggleLike = async (postId) => {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const postRef = doc(db, 'posts', postId);
-      const post = posts.value.find((p) => p.id === postId);
-
-      if (post.likes.includes(user.uid)) {
-        await updateDoc(postRef, { likes: arrayRemove(user.uid) });
-        post.likes = post.likes.filter((uid) => uid !== user.uid);
-      } else {
-        await updateDoc(postRef, { likes: arrayUnion(user.uid) });
-        post.likes.push(user.uid);
-      }
-    };
     onMounted(() => {
-      if (auth.currentUser) {
-        userEmail.value = auth.currentUser.email;
-        loadPosts();
+      if (Notification.permission === 'default') {
+        notificationPermission.value = 'default';
       }
+      loadPosts();
     });
 
-    const formatDate = (timestamp) => {
-      if (!timestamp) return 'Date inconnue';
-      const date = new Date(timestamp.seconds * 1000);
-      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-    };
-    
     return {
-      userEmail,
       posts,
       loading,
       selectedPostId,
       commentsVisible,
-      openComments,
-      closeComments,
+      notificationPermission,
+      requestNotificationPermission,
+      showNotification,
       toggleLike,
       isPostLiked,
-      signOutUser,
       formatDate,
+      openComments,
+      closeComments,
+      signOutUser,
     };
-    
   },
 };
 </script>
 
+
 <style scoped>
 .feed-container {
-  min-height: 100vh;
-  background-color: #f7fafc;
-  padding: 16px;
-}
-
-.feed-wrapper {
-  max-width: 1200px;
   margin: 0 auto;
+  padding: 2rem;
+  background: #f3f4f6;
+  min-height: 100vh;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 2rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .feed-title {
-  font-size: 24px;
-  font-weight: bold;
-  color: #2d3748;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
 }
 
 .sign-out-btn {
-  background-color: #f56565;
+  background-color: #ef4444;
   color: white;
-  padding: 8px 16px;
-  border-radius: 8px;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .sign-out-btn:hover {
-  background-color: #e53e3e;
+  background-color: #dc2626;
+  transform: translateY(-1px);
+}
+
+.sign-out-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.sign-out-btn:hover svg {
+  transform: translateX(2px);
 }
 
 .posts {
-  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .post {
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: 24px;
-  margin-bottom: 24px;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease;
+}
+
+.post:hover {
+  transform: translateY(-2px);
 }
 
 .post-header {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
 }
 
 .author-info {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-right: 1rem;
 }
 
 .author-name {
-  font-size: 18px;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: #2d3748;
+  color: #1f2937;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.author-name::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+}
+
+.author-pseudo {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0;
+  font-weight: 500;
 }
 
 .post-date {
-  font-size: 14px;
-  color: #718096;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0;
+  opacity: 0.8;
 }
 
 .post-title {
-  font-size: 20px;
+  font-size: 1.5rem;
   font-weight: 600;
-  color: #2d3748;
-  margin-bottom: 16px;
+  color: #1f2937;
+  margin-bottom: 1rem;
+  line-height: 1.2;
 }
 
 .post-content {
-  color: #4a5568;
-  margin-bottom: 16px;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #4b5563;
+  margin-bottom: 1.5rem;
+}
+
+.post-image {
+  margin: 1.5rem 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  aspect-ratio: 16/9;
 }
 
 .post-image img {
-  border-radius: 8px;
   width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .post-actions {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
 }
 
 .actions {
   display: flex;
-  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
 }
 
-.like-btn,
-.comment-btn {
+.action-btn {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.75rem;
   display: flex;
   align-items: center;
-  color: #4a5568;
-  cursor: pointer;
-  transition: color 0.3s;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  border-radius: 0.5rem;
 }
 
-.like-btn:hover {
-  color: #e53e3e;
+.action-btn:hover {
+  color: #1f2937;
+  background-color: #f3f4f6;
+  transform: translateY(-1px);
 }
 
-.comment-btn:hover {
-  color: #3182ce;
+.action-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.like-count,
+.comment-count {
+  color: #6b7280;
+  font-size: 0.875rem;
 }
 
 .liked {
-  color: #e53e3e;
+  color: #ef4444 !important;
+}
+
+@media (max-width: 640px) {
+  .feed {
+    padding: 1rem;
+  }
+
+  .feed-title {
+    font-size: 1.75rem;
+  }
+
+  .post {
+    padding: 1rem;
+  }
+
+  .post-title {
+    font-size: 1.25rem;
+  }
+
+  .post-content {
+    font-size: 0.875rem;
+  }
+
+  .post-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .actions {
+    justify-content: space-between;
+  }
 }
 
 .loading-indicator {

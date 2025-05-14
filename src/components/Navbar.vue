@@ -29,8 +29,11 @@
 
 <script setup>
 import { useRoute } from "vue-router";
+import { getAuth } from 'firebase/auth';
+import AuthButton from './AuthButton.vue';
 
 const route = useRoute();
+const auth = getAuth();
 </script>
 
 <style>

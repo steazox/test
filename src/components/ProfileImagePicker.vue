@@ -1,12 +1,7 @@
 <template>
   <div class="profile-image-picker">
     <div class="image-container">
-      <img
-        v-if="imageUrl"
-        :src="imageUrl"
-        :alt="altText"
-        class="profile-image"
-      />
+      <img v-if="imageUrl" :src="imageUrl" :alt="altText" class="profile-image" />
       <div v-else class="placeholder">
         <i class="fas fa-user"></i>
       </div>
@@ -23,79 +18,133 @@
         @change="handleFileChange"
         class="hidden"
       />
-      <button
-        v-if="imageUrl"
-        @click="deleteImage"
-        class="delete-btn"
-      >
-        <i class="fas fa-trash"></i>
-        Supprimer
-      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { getAuth } from 'firebase/auth'
-
+import { ref, onMounted, watch  } from "vue";
+import { doc, updateDoc, getFirestore, getDoc } from "firebase/firestore";
+import {getAuth} from 'firebase/auth' 
 const props = defineProps({
   userId: {
     type: String,
-    required: true
+    required: true,
   },
   defaultImage: {
     type: String,
-    default: ''
+    default: "",
+  },
+});
+
+const imageUrl = ref(props.defaultImage);
+const db = getFirestore();
+
+const fetchUserAvatar = async (userId) => {
+  try {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists() && userSnap.data().avatar) {
+      const avatarUrl = `https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/${userSnap.data().avatar}`;
+      imageUrl.value = avatarUrl;
+    }
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'avatar :", error);
   }
-})
+};
 
-const emit = defineEmits(['image-updated', 'image-deleted'])
+watch(
+  () => props.userId,
+  (newUserId) => {
+    if (!newUserId || newUserId.trim() === "") {
+      console.warn("L'ID utilisateur est vide ou invalide.");
+      return;
+    }
+    fetchUserAvatar(newUserId);
+  },
+  { immediate: true }
+);
 
-const storage = getStorage()
-const auth = getAuth()
-const imageUrl = ref(props.defaultImage)
-const altText = ref('Photo de profil')
+
+const emit = defineEmits(["image-updated", "image-deleted"])
+const altText = ref("Photo de profil");
+
+onMounted(async () => {
+  console.log(await props.userId)
+  const isValidUserId = (id) => typeof id === "string" && id.trim() !== "";
+  if (!isValidUserId(await props.userId)) {
+    console.error("Erreur : L'ID utilisateur fourni n'est pas valide.");
+    return;
+  }
+
+  try {
+    const userRef = await doc(db, 'users', props.userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists() && userSnap.data().avatar) {
+      const avatarUrl = "https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/" + userSnap.data().avatar;
+      imageUrl.value = avatarUrl;
+    }
+  } catch (error) {
+    console.error("Erreur lors de la récupération de l'avatar au montage :", error);
+  }
+});
+
 
 const handleFileChange = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-
+  const file = event.target.files[0];
+  if (!file) return;
   try {
-    const storageRefPath = `profile-images/${props.userId}/${file.name}`
-    const imageRef = storageRef(storage, storageRefPath)
+    const formData = new FormData();
+    formData.append("file", file);
+    console.log(file);
+    const response = await fetch("https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error("Échec de l'upload de l'image");
+    }
+    const responseData = await response.json();
+    console.log(responseData);
+    const url = "https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/" + responseData.fileId;
+    imageUrl.value = url;
+    emit("image-updated", url);
 
-    // Upload de l'image
-    await uploadBytes(imageRef, file)
-
-    // Récupération de l'URL de téléchargement
-    const url = await getDownloadURL(imageRef)
-    imageUrl.value = url
     
-    // Émission de l'événement pour mettre à jour le parent
-    emit('image-updated', url)
+
+    const userRef = doc(db, 'users', props.userId);
+    await updateDoc(userRef, {
+      avatar: responseData.fileId,
+    });
   } catch (error) {
-    console.error('Erreur lors de l\'upload de l\'image:', error)
-    alert('Erreur lors de l\'upload de l\'image')
+    console.error("Erreur lors de l'upload de l'image:", error);
+    alert("Erreur lors de l'upload de l'image");
   }
-}
+};
+
 
 const deleteImage = async () => {
-  if (!confirm('Êtes-vous sûr de vouloir supprimer cette image ?')) {
-    return
+  if (!confirm("Êtes-vous sûr de vouloir supprimer cette image ?")) {
+    return;
   }
-
   try {
-    const imageRef = storageRef(storage, `profile-images/${props.userId}`)
-    await deleteObject(imageRef)
-    imageUrl.value = ''
-    emit('image-deleted')
+    const response = await fetch("https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/delete", {
+      method: "POST",
+      body: JSON.stringify({ imageUrl: imageUrl.value }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    if (!response.ok) {
+      throw new Error("Erreur lors de la suppression de l'image");
+    }
+    imageUrl.value = "";
+    emit("image-deleted");
   } catch (error) {
-    console.error('Erreur lors de la suppression de l\'image:', error)
-    alert('Erreur lors de la suppression de l\'image')
+    console.error("Erreur lors de la suppression de l'image:", error);
+    alert("Erreur lors de la suppression de l'image");
   }
-}
+};
 </script>
 
 <style scoped>
