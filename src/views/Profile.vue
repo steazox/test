@@ -2,62 +2,94 @@
   <div class="profile-container">
     <div class="profile-header">
       <div class="profile-info">
-        <ProfileImagePicker
-          :userId="userUid"
-          :defaultImage="userProfileImage"
-          @image-updated="updateProfileImage"
-          @image-deleted="deleteProfileImage"
-        />
+        <!-- Gestion de l'image de profil -->
+        <div class="relative profile-image-wrapper">
+          <img
+            :src="userProfileImage"
+            alt="Image de profil"
+            class="profile-image"
+            @click="togglePhotoButton"
+          />
+          <!-- Bouton pour modifier la photo -->
+          <button
+            v-if="showPhotoButton"
+            @click="triggerFileInput"
+            class="photo-manager-btn"
+          >
+            Modifier la photo
+          </button>
+          <input
+            type="file"
+            accept="image/*"
+            ref="fileInput"
+            class="hidden-file-input"
+            @change="onImageSelected"
+          />
+        </div>
         <h2 class="text-2xl font-semibold text-gray-800">{{ userEmail }}</h2>
         <p class="text-gray-500">{{ userUid }}</p>
-        <button @click="signOut" class="sign-out-btn mt-4 bg-red-500 text-white px-4 py-2 rounded-full hover:bg-red-600">
+        <button
+          @click="signOut"
+          class="sign-out-btn"
+        >
           Se déconnecter
         </button>
       </div>
     </div>
-    <div class="profile-content mt-8">
-      <h3 class="text-xl font-semibold text-gray-700">Mes posts</h3>
-      <div v-if="posts.length === 0" class="no-posts text-center py-4">
-        <p class="text-gray-500">Aucun post publié pour le moment.</p>
+
+    <div class="profile-content">
+      <h3 class="text-xl">Mes posts</h3>
+      <div v-if="posts.length === 0" class="no-posts">
+        <p>Aucun post publié pour le moment.</p>
       </div>
-      <div v-else class="posts-list space-y-4">
+      <div v-else class="posts-list">
         <div
           v-for="post in posts"
           :key="post.id"
-          class="post-item bg-white p-4 rounded-lg shadow-md transition-transform transform hover:scale-105"
+          class="post-item"
         >
-          <div class="flex justify-between items-center mb-3">
-            <h4 class="font-semibold text-gray-800">{{ post.title }}</h4>
-            <small class="text-gray-500">{{ formatDate(post.date) }}</small>
+          <div class="post-header">
+            <h4>{{ post.title }}</h4>
+            <small>{{ formatDate(post.date) }}</small>
           </div>
-          <p class="text-gray-700">{{ post.content }}</p>
-          <div class="post-footer mt-4 flex justify-between items-center text-sm text-gray-500">
+          <p>{{ post.content }}</p>
+          <div class="post-footer">
             <span>{{ post.comments?.length || 0 }} commentaires</span>
-            <button @click="openComments(post.id)" class="text-blue-500 hover:underline">Voir les commentaires</button>
+            <button @click="openComments(post.id)" class="view-comments-btn">
+              Voir les commentaires
+            </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modale pour le lecteur d'image -->
+    <div v-if="isImageViewerOpen" class="image-viewer-overlay">
+      <div class="image-viewer">
+        <img :src="userProfileImage" alt="Image de profil" class="image-viewer-img" />
+        <button @click="closeImageViewer" class="close-btn">✕</button>
       </div>
     </div>
   </div>
 </template>
 
+
 <script>
 import { ref, onMounted } from "vue";
 import { getAuth, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
-import ProfileImagePicker from "../components/ProfileImagePicker.vue";
+import { getFirestore, collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 
 export default {
   name: "Profile",
-  components: {
-    ProfileImagePicker,
-  },
   setup() {
     const auth = getAuth();
     const userEmail = ref("");
     const userUid = ref("");
     const posts = ref([]);
-    const userProfileImage = ref("");
+    const userProfileImage = ref("default-image-path");
+    const showPhotoButton = ref(false);
+    const isImageViewerOpen = ref(false);
+    const fileInput = ref(null);
 
     onMounted(async () => {
       if (auth.currentUser) {
@@ -79,79 +111,86 @@ export default {
       }));
     };
 
-    const uploadProfileImage = async (file) => {
-  const formData = new FormData();
-  formData.append("file", file); // Ajouter le fichier dans le formData
-
-  try {
-    const response = await fetch("http://192.168.1.68:3000/api/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error("Échec de l'upload de l'image");
-    }
-
-    const data = await response.json();
-    const fileID = data.fileID; // Supposons que l'API retourne le fileID de l'image téléchargée
-    console.log(data.fileID);
-
-    // Récupérer l'URL de l'image en utilisant le fileID
-    const imageUrl = await getImageUrl(fileID);
-    userProfileImage.value = imageUrl; // Mettre à jour l'image du profil
-  } catch (error) {
-    console.error("Erreur lors de l'upload de l'image:", error);
-  }
-};
-
-
     const loadProfileImage = async () => {
-      // Remplacez par le code approprié pour charger l'image de profil.
-      userProfileImage.value = "default-image-path"; // Exemple
-    };
-
-    const updateProfileImage = (newImagePath) => {
-      userProfileImage.value = newImagePath;
-    };
-
-    const deleteProfileImage = () => {
-      userProfileImage.value = "default-image-path";
-    };
-
-    const formatDate = (date) => {
       try {
-        if (date instanceof Date) {
-          return date.toLocaleString("fr-FR", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        } else if (typeof date === "number" || typeof date === "string") {
-          const parsedDate = new Date(date);
-          return !isNaN(parsedDate.getTime())
-            ? parsedDate.toLocaleString("fr-FR", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "Date invalide";
+        const db = getFirestore();
+        const userDoc = doc(db, "users", auth.currentUser.uid);
+        const userSnapshot = await getDoc(userDoc);
+
+        if (userSnapshot.exists()) {
+          const avatar = userSnapshot.data().avatar;
+          userProfileImage.value = avatar
+            ? `http://192.168.1.68:3000/api/file/${avatar}`
+            : "default-image-path";
         }
       } catch (error) {
-        console.error("Erreur lors du formatage de la date:", error);
-        return "Date invalide";
+        console.error("Erreur lors du chargement de l'image de profil :", error);
+        userProfileImage.value = "default-image-path";
       }
+    };
+
+    const togglePhotoButton = () => {
+      showPhotoButton.value = !showPhotoButton.value;
+    };
+
+    const triggerFileInput = () => {
+      fileInput.value.click();
+    };
+
+    const onImageSelected = async (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const response = await fetch("http://192.168.1.68:3000/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error("Échec de l'upload de l'image");
+          }
+
+          const data = await response.json();
+          const fileID = data.fileID;
+          const imageUrl = `http://192.168.1.68:3000/api/file/${fileID}`;
+          userProfileImage.value = imageUrl;
+        } catch (error) {
+          console.error("Erreur lors de l'upload de l'image :", error);
+        }
+      }
+    };
+
+    const openImageViewer = () => {
+      isImageViewerOpen.value = true;
+    };
+
+    const closeImageViewer = () => {
+      isImageViewerOpen.value = false;
     };
 
     const signOutUser = async () => {
       try {
         await signOut(auth);
       } catch (error) {
-        console.error("Erreur lors de la déconnexion:", error);
+        console.error("Erreur lors de la déconnexion :", error);
+      }
+    };
+
+    const formatDate = (date) => {
+      try {
+        const parsedDate = new Date(date);
+        return parsedDate.toLocaleString("fr-FR", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      } catch (error) {
+        return "Date invalide";
       }
     };
 
@@ -160,10 +199,16 @@ export default {
       userUid,
       posts,
       userProfileImage,
-      formatDate,
+      showPhotoButton,
+      isImageViewerOpen,
+      fileInput,
+      togglePhotoButton,
+      triggerFileInput,
+      onImageSelected,
+      openImageViewer,
+      closeImageViewer,
       signOut: signOutUser,
-      updateProfileImage,
-      deleteProfileImage,
+      formatDate,
     };
   },
 };
@@ -176,57 +221,124 @@ export default {
   padding: 20px;
 }
 
-.profile-header {
-  background-color: #f5f5f5;
+.profile-info {
+  text-align: center;
+}
+
+.profile-image-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.profile-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.photo-manager-btn {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.photo-manager-btn:hover {
+  background-color: #0056b3;
+}
+
+.hidden-file-input {
+  display: none;
+}
+.profile-container {
+  max-width: 800px;
+  margin: 0 auto;
   padding: 20px;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .profile-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  text-align: center;
 }
 
-.profile-info h2 {
-  margin: 10px 0;
+.profile-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.file-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.0125;
+  cursor: pointer;
 }
 
 .sign-out-btn {
+  margin-top: 20px;
+  padding: 10px 20px;
   background-color: #f44336;
   color: white;
-  padding: 10px 20px;
-  border-radius: 30px;
-  font-weight: bold;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
 }
 
 .sign-out-btn:hover {
   background-color: #d32f2f;
 }
 
-.profile-content {
-  margin-top: 20px;
-}
-
-.post-item {
-  transition: transform 0.3s ease;
-}
-
-.post-item:hover {
-  transform: scale(1.05);
-}
-
-.post-footer {
+.image-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }
 
-.no-posts {
-  padding: 20px;
-  background-color: #f9f9f9;
+.image-viewer {
+  position: relative;
+  text-align: center;
+}
+
+.image-viewer-img {
+  max-width: 90%;
+  max-height: 90%;
   border-radius: 8px;
+}
+
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  padding: 10px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  background-color: #d32f2f;
 }
 </style>

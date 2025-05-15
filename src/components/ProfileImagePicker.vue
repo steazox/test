@@ -1,31 +1,29 @@
 <template>
   <div class="profile-image-picker">
-    <div class="image-container">
+    <div class="image-container" aria-live="polite">
       <img v-if="imageUrl" :src="imageUrl" :alt="altText" class="profile-image" />
-      <div v-else class="placeholder">
+      <div v-else class="placeholder" aria-label="Placeholder image">
         <i class="fas fa-user"></i>
       </div>
     </div>
     <div class="actions">
-      <label for="image-upload" class="upload-btn">
+      <label for="image-upload" class="upload-btn" aria-label="Choose an image">
         <i class="fas fa-upload"></i>
-        Choisir une image
+        Choose an image
       </label>
-      <input
-        type="file"
-        id="image-upload"
-        accept="image/*"
-        @change="handleFileChange"
-        class="hidden"
-      />
+      <input type="file" id="image-upload" accept="image/*" @change="handleFileChange" class="hidden" />
+      <button v-if="imageUrl" @click="deleteImage" class="delete-btn" aria-label="Delete the image">
+        <i class="fas fa-trash"></i>
+        Delete Image
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch  } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { doc, updateDoc, getFirestore, getDoc } from "firebase/firestore";
-import {getAuth} from 'firebase/auth' 
+
 const props = defineProps({
   userId: {
     type: String,
@@ -37,112 +35,97 @@ const props = defineProps({
   },
 });
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api";
+
 const imageUrl = ref(props.defaultImage);
 const db = getFirestore();
+const emit = defineEmits(["image-updated", "image-deleted"]);
+const altText = ref("Profile picture");
 
-const fetchUserAvatar = async (userId) => {
+const fetchUserAvatar = async (userId, retries = 3) => {
   try {
+    if (!userId.trim()) throw new Error("Invalid user ID.");
     const userRef = doc(db, "users", userId);
     const userSnap = await getDoc(userRef);
     if (userSnap.exists() && userSnap.data().avatar) {
-      const avatarUrl = `https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/${userSnap.data().avatar}`;
-      imageUrl.value = avatarUrl;
+      imageUrl.value = `${API_BASE_URL}/file/${userSnap.data().avatar}`;
     }
   } catch (error) {
-    console.error("Erreur lors de la récupération de l'avatar :", error);
+    if (retries > 0) {
+      console.warn(`Retrying... (${3 - retries} attempts left)`);
+      return fetchUserAvatar(userId, retries - 1);
+    }
+    console.error("Failed to fetch avatar:", error);
   }
 };
+
+onMounted(() => {
+  fetchUserAvatar(props.userId);
+});
 
 watch(
   () => props.userId,
   (newUserId) => {
-    if (!newUserId || newUserId.trim() === "") {
-      console.warn("L'ID utilisateur est vide ou invalide.");
-      return;
-    }
     fetchUserAvatar(newUserId);
   },
   { immediate: true }
 );
 
-
-const emit = defineEmits(["image-updated", "image-deleted"])
-const altText = ref("Photo de profil");
-
-onMounted(async () => {
-  console.log(await props.userId)
-  const isValidUserId = (id) => typeof id === "string" && id.trim() !== "";
-  if (!isValidUserId(await props.userId)) {
-    console.error("Erreur : L'ID utilisateur fourni n'est pas valide.");
-    return;
-  }
-
-  try {
-    const userRef = await doc(db, 'users', props.userId);
-    const userSnap = await getDoc(userRef);
-    if (userSnap.exists() && userSnap.data().avatar) {
-      const avatarUrl = "https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/" + userSnap.data().avatar;
-      imageUrl.value = avatarUrl;
-    }
-  } catch (error) {
-    console.error("Erreur lors de la récupération de l'avatar au montage :", error);
-  }
-});
-
-
 const handleFileChange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
+
   try {
     const formData = new FormData();
     formData.append("file", file);
-    console.log(file);
-    const response = await fetch("https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/upload", {
+
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: "POST",
       body: formData,
     });
+
     if (!response.ok) {
-      throw new Error("Échec de l'upload de l'image");
+      throw new Error(`Upload error: ${response.statusText}`);
     }
+
     const responseData = await response.json();
-    console.log(responseData);
-    const url = "https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/" + responseData.fileId;
+    if (!responseData.fileId) {
+      throw new Error("Missing file ID in upload response.");
+    }
+
+    const url = `${API_BASE_URL}/file/${responseData.fileId}`;
     imageUrl.value = url;
     emit("image-updated", url);
 
-    
-
-    const userRef = doc(db, 'users', props.userId);
-    await updateDoc(userRef, {
-      avatar: responseData.fileId,
-    });
+    const userRef = doc(db, "users", props.userId);
+    await updateDoc(userRef, { avatar: responseData.fileId });
   } catch (error) {
-    console.error("Erreur lors de l'upload de l'image:", error);
-    alert("Erreur lors de l'upload de l'image");
+    console.error("Image upload error:", error);
+    alert("An error occurred while uploading the image.");
   }
 };
 
-
 const deleteImage = async () => {
-  if (!confirm("Êtes-vous sûr de vouloir supprimer cette image ?")) {
-    return;
-  }
+  if (!confirm("Are you sure you want to delete this image?")) return;
+
   try {
-    const response = await fetch("https://c9a2-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/delete", {
+    const response = await fetch(`${API_BASE_URL}/delete`, {
       method: "POST",
       body: JSON.stringify({ imageUrl: imageUrl.value }),
       headers: {
         "Content-Type": "application/json",
       },
     });
+
     if (!response.ok) {
-      throw new Error("Erreur lors de la suppression de l'image");
+      throw new Error("Image deletion error.");
     }
+
     imageUrl.value = "";
     emit("image-deleted");
   } catch (error) {
-    console.error("Erreur lors de la suppression de l'image:", error);
-    alert("Erreur lors de la suppression de l'image");
+    console.error("Image deletion error:", error);
+    alert("An error occurred while deleting the image.");
   }
 };
 </script>
@@ -222,7 +205,6 @@ const deleteImage = async () => {
   display: none;
 }
 
-/* Styles pour mobile */
 @media screen and (max-width: 768px) {
   .image-container {
     width: 100px;
