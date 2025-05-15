@@ -120,7 +120,7 @@ export default {
         if (userSnapshot.exists()) {
           const avatar = userSnapshot.data().avatar;
           userProfileImage.value = avatar
-            ? `http://192.168.1.68:3000/api/file/${avatar}`
+            ? `https://018c-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/${avatar}`
             : "default-image-path";
         }
       } catch (error) {
@@ -144,7 +144,7 @@ export default {
         formData.append("file", file);
 
         try {
-          const response = await fetch("http://192.168.1.68:3000/api/upload", {
+          const response = await fetch("https://018c-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/upload", {
             method: "POST",
             body: formData,
           });
@@ -155,7 +155,7 @@ export default {
 
           const data = await response.json();
           const fileID = data.fileID;
-          const imageUrl = `http://192.168.1.68:3000/api/file/${fileID}`;
+          const imageUrl = `https://018c-2a02-8429-4f31-4601-ba27-ebff-feeb-4451.ngrok-free.app/api/file/${fileID}`;
           userProfileImage.value = imageUrl;
         } catch (error) {
           console.error("Erreur lors de l'upload de l'image :", error);
