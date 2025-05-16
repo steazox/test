@@ -4,34 +4,16 @@
       <div class="profile-info">
         <!-- Gestion de l'image de profil -->
         <div class="relative profile-image-wrapper">
-          <img
-            :src="userProfileImage"
-            alt="Image de profil"
-            class="profile-image"
-            @click="togglePhotoButton"
-          />
+          <img :src="userProfileImage" alt="Image de profil" class="profile-image" @click="togglePhotoButton" />
           <!-- Bouton pour modifier la photo -->
-          <button
-            v-if="showPhotoButton"
-            @click="triggerFileInput"
-            class="photo-manager-btn"
-          >
+          <button v-if="showPhotoButton" @click="triggerFileInput" class="photo-manager-btn">
             Modifier la photo
           </button>
-          <input
-            type="file"
-            accept="image/*"
-            ref="fileInput"
-            class="hidden-file-input"
-            @change="onImageSelected"
-          />
+          <input type="file" accept="image/*" ref="fileInput" class="hidden-file-input" @change="onImageSelected" />
         </div>
         <h2 class="text-2xl font-semibold text-gray-800">{{ userEmail }}</h2>
         <p class="text-gray-500">{{ userUid }}</p>
-        <button
-          @click="signOut"
-          class="sign-out-btn"
-        >
+        <button @click="signOut" class="sign-out-btn">
           Se déconnecter
         </button>
       </div>
@@ -43,11 +25,7 @@
         <p>Aucun post publié pour le moment.</p>
       </div>
       <div v-else class="posts-list">
-        <div
-          v-for="post in posts"
-          :key="post.id"
-          class="post-item"
-        >
+        <div v-for="post in posts" :key="post.id" class="post-item">
           <div class="post-header">
             <h4>{{ post.title }}</h4>
             <small>{{ formatDate(post.date) }}</small>
@@ -77,7 +55,7 @@
 <script>
 import { ref, onMounted } from "vue";
 import { getAuth, signOut } from "firebase/auth";
-import { getFirestore, collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
 
 export default {
   name: "Profile",
@@ -120,7 +98,7 @@ export default {
         if (userSnapshot.exists()) {
           const avatar = userSnapshot.data().avatar;
           userProfileImage.value = avatar
-            ? `https://1ea17031f5143107061ff38ef29b2242.loophole.site/api/file/${avatar}`
+            ? `https://3c8b2c3e05304d343d99d452b8d252bd.loophole.site/api/file/${avatar}`
             : "default-image-path";
         }
       } catch (error) {
@@ -138,12 +116,12 @@ export default {
     };
 
     const fetchWithBypass = async (url, options = {}) => {
-    options.headers = {
-      ...options.headers,
-      "bypass-tunnel-reminder": "true",
+      options.headers = {
+        ...options.headers,
+        "bypass-tunnel-reminder": "true",
+      };
+      return fetch(url, options);
     };
-    return fetchWithBypass(url, options);
-  };
 
     const onImageSelected = async (event) => {
       const file = event.target.files[0];
@@ -152,24 +130,43 @@ export default {
         formData.append("file", file);
 
         try {
-          const response = await fetchWithBypass("https://1ea17031f5143107061ff38ef29b2242.loophole.site/api/upload", {
-            method: "POST",
-            body: formData,
-          });
+          const response = await fetchWithBypass(
+            "https://3c8b2c3e05304d343d99d452b8d252bd.loophole.site/api/upload",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
 
           if (!response.ok) {
             throw new Error("Échec de l'upload de l'image");
           }
 
           const data = await response.json();
+          // Vérifiez que fileID est défini
+          if (!data.fileId) {
+            throw new Error("L'API n'a pas renvoyé de fileID valide");
+            
+          }
+
           const fileID = data.fileID;
-          const imageUrl = `https://1ea17031f5143107061ff38ef29b2242.loophole.site/api/file/${fileID}`;
+          console.log(data);
+          const imageUrl = `https://3c8b2c3e05304d343d99d452b8d252bd.loophole.site/api/file/${fileID}`;
           userProfileImage.value = imageUrl;
+
+          // Mise à jour de Firestore avec l'URL de l'avatar
+          const db = getFirestore();
+          const userDoc = doc(db, "users", auth.currentUser.uid);
+          await updateDoc(userDoc, {
+            avatar: fileID, // Sauvegarde uniquement le fileID dans Firestore
+          });
         } catch (error) {
           console.error("Erreur lors de l'upload de l'image :", error);
         }
       }
     };
+
+
 
     const openImageViewer = () => {
       isImageViewerOpen.value = true;
@@ -267,6 +264,7 @@ export default {
 .hidden-file-input {
   display: none;
 }
+
 .profile-container {
   max-width: 800px;
   margin: 0 auto;
