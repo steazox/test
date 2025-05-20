@@ -22,12 +22,11 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/profile',
+    path: '/profile/:id',
     name: 'Profile',
     component: () => import('../views/Profile.vue'),
     meta: { requiresAuth: true }
   },
-
   {
     path: '/login',
     name: 'Login',

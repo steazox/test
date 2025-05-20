@@ -5,7 +5,7 @@
       class="nav-item"
       :class="{ active: route.path === '/feed' }"
     >
-      <i class="fas fa-home"></i>
+      <font-awesome-icon :icon="['fa-solid', 'fa-home']" />
       <span>Feed</span>
     </router-link>
     <router-link
@@ -13,27 +13,48 @@
       class="nav-item"
       :class="{ active: route.path === '/posts/new' }"
     >
-      <i class="fas fa-plus-circle"></i>
+      <font-awesome-icon :icon="['fa-solid', 'fa-plus-circle']" />
       <span>Nouveau Post</span>
     </router-link>
     <router-link
-      to="/profile"
+      v-if="userId"
+      :to="`/profile/${userId}`"
       class="nav-item"
-      :class="{ active: route.path === '/profile' }"
+      :class="{ active: route.path.startsWith('/profile') }"
     >
-      <i class="fas fa-user"></i>
+      <font-awesome-icon :icon="['fa-solid', 'fa-user']" />
       <span>Profil</span>
+    </router-link>
+    <router-link
+      v-else
+      to="/login"
+      class="nav-item"
+    >
+      <font-awesome-icon :icon="['fa-solid', 'fa-sign-in-alt']" />
+      <span>Se Connecter</span>
     </router-link>
   </nav>
 </template>
 
 <script setup>
+import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { getAuth } from 'firebase/auth';
-import AuthButton from './AuthButton.vue';
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 const route = useRoute();
+const userId = ref(null);
+
+// Initialisation de Firebase Auth
 const auth = getAuth();
+
+// Gestion de l'utilisateur connecté
+onMounted(() => {
+  console.log(import.meta.env.VITE_API_KEY); // Affiche 123456
+
+  onAuthStateChanged(auth, (user) => {
+    userId.value = user ? user.uid : null;
+  });
+});
 </script>
 
 <style>
@@ -77,6 +98,4 @@ const auth = getAuth();
 .nav-item.active i {
   color: #007bff;
 }
-
-
 </style>

@@ -2,11 +2,7 @@
   <div class="feed-container">
     <div class="feed-wrapper">
       <div class="header">
-        <h1 class="feed-title">Feed</h1>
-        <button @click="signOutUser" class="sign-out-btn">
-          <font-awesome-icon icon="sign-out-alt" class="mr-2" />
-          Se déconnecter
-        </button>
+
         <button 
           v-if="notificationPermission === 'default'" 
           @click="requestNotificationPermission" 
@@ -20,7 +16,7 @@
         <div v-for="post in posts" :key="post.id" class="post">
           <div class="post-header">
             <div class="author-info">
-              <h3 class="author-name">{{ post.authorDisplayName }}</h3>
+              <router-link :to="`/profile/${post.authorId}`" class="author-name">{{ post.authorDisplayName }}</router-link>
               <p class="author-pseudo">@{{ post.authorPseudo }}</p>
               <p class="post-date">{{ formatDate(post.createdAt) }}</p>
             </div>
