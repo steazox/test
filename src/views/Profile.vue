@@ -20,6 +20,12 @@
           <button v-if="isCurrentUser" @click="signOut" class="sign-out-btn">
             Se déconnecter
           </button>
+          <button v-if="!isSub && !isCurrentUser" class="Subscibe" @click="subscribe(userProfile.id)">
+            S'abonner
+          </button>
+          <button v-else-if="isSub && !isCurrentUser" class="alSub">
+            Abonnée
+          </button>
         </div>
       </div>
 
@@ -59,7 +65,7 @@
 <script>
 import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { getFirestore, doc, getDoc, query, where, getDocs, collection, updateDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, query, where, getDocs, collection, updateDoc, arrayUnion } from "firebase/firestore";
 import { getAuth, signOut } from "firebase/auth";
 import dotenv from "dotenv";
 
@@ -69,6 +75,8 @@ export default {
     const route = useRoute();
     const auth = getAuth();
     const db = getFirestore();
+
+    const isSub = ref(false);
 
     const loading = ref(true);
     const userProfile = ref(null);
@@ -88,7 +96,7 @@ export default {
           isCurrentUser.value = auth.currentUser?.uid === userId;
           userProfileImage.value = userProfile.value.avatar
             ? import.meta.env.VITE_API_BASE_URL + "api/file/" + userProfile.value.avatar
-            : "default-image-path";
+            : "/stock-img.png";
         } else {
           userProfile.value = null;
         }
@@ -107,6 +115,36 @@ export default {
         id: doc.id,
         ...doc.data(),
       }));
+    };
+
+    const loadFirebaseProfile = async (userId) => {
+      const userDoc = doc(db, "users", userId);
+      const userSnapshot = await getDoc(userDoc);
+      return userDoc;
+    }
+
+    const subscribe = async (targetId) => {
+      const userId = auth.currentUser.uid;
+      const userDoc = doc(db, "users", userId);
+
+      try {
+        await updateDoc(userDoc, {
+          subscriber: arrayUnion(targetId),
+        });
+        isSub.value = true;
+      } catch (error) {
+        console.error("Erreur lors de l'abonnement :", error);
+      }
+    };
+
+    const checkIfSubscribed = async () => {
+      const userId = auth.currentUser.uid;
+      const userDoc = doc(db, "users", userId);
+      const userSnapshot = await getDoc(userDoc);
+      if (userSnapshot.exists()) {
+        const { subscriber } = userSnapshot.data();
+        isSub.value = subscriber?.includes(route.params.id) || false;
+      }
     };
 
     const togglePhotoButton = () => {
@@ -196,7 +234,7 @@ export default {
       if (userId) {
         await loadUserProfile(userId);
         if (userProfile.value) {
-          await loadUserPosts(userId);
+          await checkIfSubscribed();
         }
       } else {
         loading.value = false;
@@ -205,6 +243,7 @@ export default {
 
     return {
       loading,
+      isSub,
       userProfile,
       posts,
       isCurrentUser,
@@ -219,6 +258,7 @@ export default {
       closeImageViewer,
       signOut: signOutUser,
       formatDate,
+      subscribe,
     };
   },
 };
@@ -246,7 +286,8 @@ export default {
   border-radius: 50%;
   cursor: pointer;
   object-fit: cover;
-  border: 5px solid #d8d8d8; /* Taille, style et couleur de la bordure */
+  border: 5px solid #d8d8d8;
+  /* Taille, style et couleur de la bordure */
 }
 
 .photo-manager-btn {
@@ -296,6 +337,24 @@ export default {
   align-items: center;
   justify-content: center;
   z-index: 9999;
+}
+
+.Subscibe {
+  padding: 15px 25px 15px 25px;
+  border: none;
+  border-radius: 20px;
+  background-color: #0056b3;
+  color: #f1f1F1;
+  font-weight: 900;
+}
+
+.alSub {
+  background-color:#FfFfFf;
+  border: #333333 solid 4px;
+  font-weight: 900;
+  padding: 15px 25px 15px 25px;
+  border-radius: 20px;
+  color: #333333;
 }
 
 .image-viewer {

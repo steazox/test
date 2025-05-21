@@ -2,21 +2,20 @@
   <div class="feed-container">
     <div class="feed-wrapper">
       <div class="header">
+        <div class="list">
 
-        <button 
-          v-if="notificationPermission === 'default'" 
-          @click="requestNotificationPermission" 
-          class="notification-button"
-        >
+        </div>
+      </div>
+      <div class="posts" v-if="!loading">
+        <button v-if="notificationPermission === 'default'" @click="requestNotificationPermission"
+          class="notification-button">
           Autoriser les notifications
         </button>
-      </div>
-
-      <div class="posts" v-if="!loading">
         <div v-for="post in posts" :key="post.id" class="post">
           <div class="post-header">
             <div class="author-info">
-              <router-link :to="`/profile/${post.authorId}`" class="author-name">{{ post.authorDisplayName }}</router-link>
+              <router-link :to="`/profile/${post.authorId}`" class="author-name">{{ post.authorDisplayName
+              }}</router-link>
               <p class="author-pseudo">@{{ post.authorPseudo }}</p>
               <p class="post-date">{{ formatDate(post.createdAt) }}</p>
             </div>
@@ -32,10 +31,7 @@
           <div class="post-actions">
             <div class="actions">
               <button @click="toggleLike(post.id)" class="like-btn">
-                <font-awesome-icon
-                  :icon="['fas', 'heart']"
-                  :style="{ color: isPostLiked(post.id) ? 'red' : 'gray' }"
-                />
+                <font-awesome-icon :icon="['fas', 'heart']" :style="{ color: isPostLiked(post.id) ? 'red' : 'gray' }" />
                 <span :class="{ 'liked': isPostLiked(post.id) }">{{ post.likes?.length || 0 }}</span>
               </button>
               <button @click="openComments(post.id)" class="comment-btn">
@@ -47,11 +43,7 @@
         </div>
       </div>
 
-      <CommentsSection
-        :postId="selectedPostId"
-        :visible="commentsVisible"
-        :closeComments="closeComments"
-      />
+      <CommentsSection :postId="selectedPostId" :visible="commentsVisible" :closeComments="closeComments" />
 
       <div class="loading-indicator" v-if="loading">
         <div class="spinner"></div>
@@ -64,7 +56,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { auth, db } from '../firebase';
-import { collection, getDocs, updateDoc, doc, arrayRemove, arrayUnion } from 'firebase/firestore';
+import { collection, getDocs, getDoc, updateDoc, doc, arrayRemove, arrayUnion } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import CommentsSection from '../components/CommentsSection.vue';
 
@@ -96,16 +88,16 @@ export default {
     };
 
     const showNotification = (title, body) => {
-  if (notificationPermission.value === 'granted') {
-    try {
-      new Notification(title, { body, icon: '/favicon.ico' });
-    } catch (error) {
-      console.error('Erreur lors de l’envoi de la notification :', error);
-    }
-  } else {
-    console.warn('Les notifications ne sont pas autorisées.');
-  }
-};
+      if (notificationPermission.value === 'granted') {
+        try {
+          new Notification(title, { body, icon: '/favicon.ico' });
+        } catch (error) {
+          console.error('Erreur lors de l’envoi de la notification :', error);
+        }
+      } else {
+        console.warn('Les notifications ne sont pas autorisées.');
+      }
+    };
 
 
     const loadPosts = async () => {
@@ -121,6 +113,34 @@ export default {
         console.error('Erreur lors du chargement des posts:', error);
       }
     };
+
+    const loadSubscribers = async (userId) => {
+      try {
+        // Référence au document utilisateur
+        const userDocRef = doc(db, 'users', userId);
+        const userSnapshot = await getDoc(userDocRef);
+
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data();
+          const subscribers = userData.subscriber; // Accès au tableau "subscriber"
+
+          if (subscribers && Array.isArray(subscribers)) {
+            console.log("Liste des abonnés :", subscribers);
+            return subscribers;
+          } else {
+            console.log("Aucun abonné trouvé pour cet utilisateur.");
+            return [];
+          }
+        } else {
+          console.log("Utilisateur introuvable.");
+          return [];
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des abonnés :", error);
+        return [];
+      }
+    };
+
 
     const isPostLiked = postId => {
       const post = posts.value.find(p => p.id === postId);
@@ -176,6 +196,7 @@ export default {
         notificationPermission.value = 'default';
       }
       loadPosts();
+      loadSubscribers(auth.currentUser.uid);
     });
 
     return {
@@ -200,20 +221,11 @@ export default {
 
 <style scoped>
 .feed-container {
-  margin: 0 auto;
-  padding: 2rem;
-  background: #f3f4f6;
   min-height: 100vh;
+  background-color: #333333;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid #e5e7eb;
-}
+.header {}
 
 .feed-title {
   font-size: 2rem;
@@ -440,7 +452,12 @@ export default {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>
