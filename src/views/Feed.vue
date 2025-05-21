@@ -2,8 +2,8 @@
   <div class="feed-container">
     <div class="feed-wrapper">
       <div class="header">
-        <div class="list">
-
+        <div class="list" v-for="sub in subList">
+          {{sub}}
         </div>
       </div>
       <div class="posts" v-if="!loading">
@@ -71,6 +71,8 @@ export default {
     const commentsVisible = ref(false);
     const notificationPermission = ref(Notification.permission);
 
+    const subList = ref([]);
+
     // Gestion des notifications
     const requestNotificationPermission = () => {
       if (!('Notification' in window)) {
@@ -86,6 +88,8 @@ export default {
         }
       });
     };
+
+    const 
 
     const showNotification = (title, body) => {
       if (notificationPermission.value === 'granted') {
@@ -126,6 +130,7 @@ export default {
 
           if (subscribers && Array.isArray(subscribers)) {
             console.log("Liste des abonnés :", subscribers);
+            subList.value = subscribers;
             return subscribers;
           } else {
             console.log("Aucun abonné trouvé pour cet utilisateur.");
@@ -201,6 +206,7 @@ export default {
 
     return {
       posts,
+      subList,
       loading,
       selectedPostId,
       commentsVisible,
