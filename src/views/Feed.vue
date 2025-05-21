@@ -2,8 +2,11 @@
   <div class="feed-container">
     <div class="feed-wrapper">
       <div class="header">
-        <div class="list" v-for="sub in subList">
-          {{sub}}
+        <div class="list" v-for="(sub, index) in subProfilePicture" :key="index">
+          <router-link :to="sub.url">
+            <img :src="sub.imageUrl" alt="" class="profile-image">
+            <p class="pseudo">{{ sub.pseudo }}</p>
+          </router-link>
         </div>
       </div>
       <div class="posts" v-if="!loading">
@@ -72,6 +75,7 @@ export default {
     const notificationPermission = ref(Notification.permission);
 
     const subList = ref([]);
+    const subProfilePicture = ref([]);
 
     // Gestion des notifications
     const requestNotificationPermission = () => {
@@ -89,7 +93,46 @@ export default {
       });
     };
 
-    const 
+    const loadUserProfileImage = async (userId) => {
+      try {
+        const userDoc = doc(db, "users", userId);
+        const userSnapshot = await getDoc(userDoc);
+
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data();
+          const imageUrl = userData.avatar
+            ? import.meta.env.VITE_API_BASE_URL + "api/file/" + userData.avatar
+            : "/stock-img.png";
+          return imageUrl;
+        } else {
+          return "/stock-img.png"; // Image par défaut si l'utilisateur n'existe pas
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement de l'image du profil :", error);
+        return "/stock-img.png"; // Retourne une image par défaut en cas d'erreur
+      }
+    };
+
+
+    const getsAvatar = async (idList) => {
+  for (const id of idList) {
+    try {
+      const userProfile = await loadFirebaseProfile(id);
+      const userData = userProfile.data();
+      subProfilePicture.value.push({
+        imageUrl: await loadUserProfileImage(id),
+        pseudo: userData?.pseudo || 'Anonyme',
+        url: "/profile/" + id,
+      });
+    } catch (error) {
+      console.error(`Erreur lors du chargement du profil utilisateur avec l'ID ${id}:`, error);
+      subProfilePicture.value.push({
+        imageUrl: "/stock-img.png", 
+        pseudo: 'Erreur', 
+      });
+    }
+  }
+};
 
     const showNotification = (title, body) => {
       if (notificationPermission.value === 'granted') {
@@ -102,6 +145,12 @@ export default {
         console.warn('Les notifications ne sont pas autorisées.');
       }
     };
+
+    const loadFirebaseProfile = async (userId) => {
+      const userDoc = doc(db, "users", userId);
+      const userSnapshot = await getDoc(userDoc);
+      return userSnapshot;
+    }
 
 
     const loadPosts = async () => {
@@ -131,7 +180,9 @@ export default {
           if (subscribers && Array.isArray(subscribers)) {
             console.log("Liste des abonnés :", subscribers);
             subList.value = subscribers;
+            getsAvatar(subscribers);
             return subscribers;
+
           } else {
             console.log("Aucun abonné trouvé pour cet utilisateur.");
             return [];
@@ -207,6 +258,7 @@ export default {
     return {
       posts,
       subList,
+      subProfilePicture,
       loading,
       selectedPostId,
       commentsVisible,
@@ -231,7 +283,49 @@ export default {
   background-color: #333333;
 }
 
-.header {}
+.header {
+  padding: 20px;
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.list {
+  display: flex;
+  flex-direction: column; /* Organise les éléments verticalement */
+  align-items: center; /* Centre les éléments horizontalement */
+  margin-right: 15px; /* Espacement entre les éléments */
+}
+
+.pseudo {
+  margin-top: 8px;
+  font-size: 0.875rem;
+  color: #ffffff; 
+  text-align: center;
+  max-width: 120px; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+}
+
+.header::-webkit-scrollbar {
+  height: 0px;
+  /* Taille de la barre de défilement */
+}
+
+.header::-webkit-scrollbar-thumb {
+  background: #888;
+  /* Couleur de la barre */
+  border-radius: 4px;
+  /* Coins arrondis */
+}
+
+.header::-webkit-scrollbar-thumb:hover {
+  background: #555;
+  /* Couleur de la barre au survol */
+}
 
 .feed-title {
   font-size: 2rem;
@@ -455,6 +549,16 @@ export default {
   width: 48px;
   height: 48px;
   animation: spin 1s linear infinite;
+}
+
+.profile-image {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  cursor: pointer;
+  object-fit: cover;
+  border: 3px solid #d8d8d8;
+  /* Taille, style et couleur de la bordure */
 }
 
 @keyframes spin {

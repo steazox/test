@@ -208,7 +208,7 @@ export default {
           uid: auth.currentUser.uid,
           email: auth.currentUser.email,
           displayName: displayName.value,
-          username: username.value,
+          pseudo: username.value,
           bio: bio.value,
           createdAt: new Date(),
           lastLogin: new Date(),
